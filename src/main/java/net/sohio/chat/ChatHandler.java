@@ -73,8 +73,7 @@ public class ChatHandler extends Handler.Abstract {
 
     @WebSocket
     public static class WebSocketHandler {
-        private static record IncomingMessage(String after) {
-        }
+        private static record IncomingMessage(String after) {}
 
         private static Gson gson = new Gson();
         private static PGConnection listenCon = null;
@@ -201,22 +200,27 @@ public class ChatHandler extends Handler.Abstract {
     }
 
     protected void doPost(Request req, Response resp) throws Exception {
-        var timestamp = Instant.now();
+        var msg = Request.getParameters(req).getValue("msg").trim();
 
-        try (var con = ds.getConnection()) {
-            con.setAutoCommit(false);
-            var snowflake = counter.incrementAndGet(timestamp);
-            try (var stmt = con.prepareStatement("INSERT INTO messages VALUES (?, ?, ?)")) {
-                stmt.setLong(1, snowflake.rep());
-                stmt.setString(2, "user");
-                stmt.setString(3, Request.getParameters(req).getValue("msg"));
-                stmt.execute();
+        if (!msg.isEmpty()) {
+            var timestamp = Instant.now();
+
+            try (var con = ds.getConnection()) {
+                con.setAutoCommit(false);
+                var snowflake = counter.incrementAndGet(timestamp);
+                try (var stmt = con.prepareStatement("INSERT INTO messages VALUES (?, ?, ?)")) {
+                    stmt.setLong(1, snowflake.rep());
+                    stmt.setString(2, "user");
+                    stmt.setString(3, Request.getParameters(req).getValue("msg"));
+                    stmt.execute();
+                }
+                try (var stmt = con.createStatement()) {
+                    stmt.execute("SELECT pg_notify('messages', '')");
+                }
+                con.commit();
             }
-            try (var stmt = con.createStatement()) {
-                stmt.execute("SELECT pg_notify('messages', '')");
-            }
-            con.commit();
         }
+
         resp.setStatus(HttpStatus.NO_CONTENT_204);
     }
 
