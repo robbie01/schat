@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width">
+        <title>SChat</title>
+        <style>
+            #chat {
+                background: #ccc;
+                height: 100%;
+                display: grid;
+                grid-template-rows: auto 32px;
+            }
+
+            html, body {
+                height: 100%;
+                overflow: hidden;
+                margin: 0;
+            }
+
+            #send {
+                display: flex;
+            }
+
+            #send > input[type="text"] {
+                flex: 1;
+            }
+
+            #messages {
+                list-style-type: none;
+                margin: 0;
+                padding: 0;
+                overflow: scroll;
+            }
+
+            #messages > li {
+                padding: 10px;
+            }
+
+            #messages > li:nth-child(odd) {
+                background: #ddd;
+            }
+
+            #messages > li:nth-child(even) {
+                background: #eee;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="chat" hx-ext="ws" ws-connect="ws">
+            <ul id="messages" th:attrappend="hx-swap-oob=${liveUpdate}?'beforeend'">
+                <li th:each="message: ${messages}" th:attr="data-id=${message.id}">
+                    <strong th:text="${message.username}">robbie</strong>: <span th:text="${message.msg}">hello world</span>
+                </li>
+            </ul>
+            <form id="send" method="post" hx-boost="true" hx-on::before-request="this.reset()">
+                <input type="text" name="msg">
+                <input type="submit" value="➤">
+            </form>
+        </div>
+        <script>
+            {
+                let chat = document.getElementById("chat")
+                let messages = document.getElementById("messages")
+
+                chat.addEventListener("htmx:wsOpen", function (e) {
+                    let after = messages.lastElementChild?.dataset?.id
+                    if (after == null) after = -1
+                    e.detail.socketWrapper.sendImmediately(
+                        JSON.stringify({ after }),
+                        messages
+                    )
+                })
+
+                window.addEventListener("DOMContentLoaded", () => {
+                    messages.scrollTo(0, messages.scrollHeight)
+                })
+
+                chat.addEventListener("htmx:wsAfterMessage", function (e) {
+                    messages.scrollTo(0, messages.scrollHeight)
+                })
+            }
+        </script>
+        <script src="https://unpkg.com/htmx.org@2.0.2/dist/htmx.min.js"></script>
+        <script src="https://unpkg.com/htmx-ext-ws@2.0.1/ws.js"></script>
+        <script src="https://unpkg.com/hyperscript.org@0.9.12/dist/_hyperscript.min.js"></script>
+    </body>
+</html>
