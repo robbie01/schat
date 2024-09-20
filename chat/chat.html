@@ -4,45 +4,99 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width">
         <title>SChat</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">        
         <style>
-            #chat {
-                background: #ccc;
-                height: 100%;
-                display: grid;
-                grid-template-rows: auto 32px;
+            :root {
+                font-size: 62.5%; /* 1rem = 10px */
+                --background-color: #ffffff;
+                --text-color: #000000;
+                --chat-bg-color: #f0f0f0;
+                --message-border-color: #ccc;
+                --send-bg-color: #e0e0e0;
+                --input-bg-color: #fff;
+                --input-text-color: #000;
+                --submit-bg-color: #6200ea;
+                --submit-hover-bg-color: #3700b3;
+                --submit-text-color: #ffffff;
             }
 
-            html, body {
-                height: 100%;
-                overflow: hidden;
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --background-color: #121212;
+                    --text-color: #ffffff;
+                    --chat-bg-color: #1e1e1e;
+                    --message-border-color: #333;
+                    --send-bg-color: #242424;
+                    --input-bg-color: #333;
+                    --input-text-color: #fff;
+                }
+            }
+
+            body {
                 margin: 0;
+                font-family: 'Raleway', sans-serif;
+                background-color: var(--background-color);
+                color: var(--text-color);
+                font-size: 1.6rem; /* 16px */
+            }
+
+            #chat {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                background-color: var(--chat-bg-color);
+            }
+
+            #messages {
+                margin: 0;
+                flex: 1;
+                overflow-y: auto;
+                padding: 1rem; /* 10px */
+                list-style-type: none;
+            }
+
+            #messages li {
+                margin-bottom: 1rem; /* 10px */
+                padding-bottom: 1rem; /* 10px */
+                border-bottom: 0.1rem solid var(--message-border-color); /* 1px */
+                font-weight: 400; /* Regular weight */
+            }
+
+            #messages li strong {
+                font-weight: 700; /* Bold weight */
             }
 
             #send {
                 display: flex;
+                padding: 1rem; /* 10px */
+                background-color: var(--send-bg-color);
             }
 
-            #send > input[type="text"] {
+            #send input[type="text"] {
                 flex: 1;
+                padding: 1rem; /* 10px */
+                border: none;
+                border-radius: 0.5rem; /* 5px */
+                margin-right: 1rem; /* 10px */
+                background-color: var(--input-bg-color);
+                color: var(--input-text-color);
+                font-weight: 300; /* Light weight */
             }
 
-            #messages {
-                list-style-type: none;
-                margin: 0;
-                padding: 0;
-                overflow: scroll;
+            #send input[type="submit"] {
+                padding: 1rem 2rem; /* 10px 20px */
+                border: none;
+                border-radius: 0.5rem; /* 5px */
+                background-color: var(--submit-bg-color);
+                color: var(--submit-text-color);
+                cursor: pointer;
+                font-weight: 600; /* Semi-bold weight */
             }
 
-            #messages > li {
-                padding: 10px;
-            }
-
-            #messages > li:nth-child(odd) {
-                background: #ddd;
-            }
-
-            #messages > li:nth-child(even) {
-                background: #eee;
+            #send input[type="submit"]:hover {
+                background-color: var(--submit-hover-bg-color);
             }
         </style>
     </head>
@@ -54,7 +108,7 @@
                 </li>
             </ul>
             <form id="send" method="post" hx-boost="true" hx-on::before-request="this.reset()">
-                <input type="text" name="msg">
+                <input type="text" name="msg" placeholder="Message...">
                 <input type="submit" value="➤">
             </form>
         </div>
