@@ -57,6 +57,10 @@
       <artifactId>jetty-server</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-session</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
       <artifactId>jetty-websocket-jetty-server</artifactId>
     </dependency>
@@ -73,7 +77,7 @@
     <dependency>
       <groupId>com.impossibl.pgjdbc-ng</groupId>
       <artifactId>pgjdbc-ng</artifactId>
-      <version>LATEST</version>
+      <version>0.8.9</version>
     </dependency>
     <dependency>
       <groupId>com.zaxxer</groupId>

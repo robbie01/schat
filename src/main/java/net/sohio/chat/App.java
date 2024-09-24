@@ -2,12 +2,16 @@ package net.sohio.chat;
 
 import java.sql.SQLException;
 
-import javax.sql.DataSource;
-
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
+import org.eclipse.jetty.server.handler.gzip.GzipHandler;
+import org.eclipse.jetty.session.DatabaseAdaptor;
+import org.eclipse.jetty.session.DefaultSessionIdManager;
+import org.eclipse.jetty.session.JDBCSessionDataStoreFactory;
+import org.eclipse.jetty.session.NullSessionCacheFactory;
 
+import com.impossibl.postgres.api.jdbc.PGConnection;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
@@ -15,7 +19,7 @@ import com.zaxxer.hikari.HikariDataSource;
  * Hello world!
  */
 public class App {
-    private static DataSource configureDatabase() {
+    private static HikariDataSource configureDatabase() {
         var dbConfig = new HikariConfig();
         dbConfig.setDataSourceClassName("com.impossibl.postgres.jdbc.PGDataSource");
         dbConfig.addDataSourceProperty("serverName", "localhost");
@@ -29,6 +33,12 @@ public class App {
         var server = new Server(8000);
 
         var ds = configureDatabase();
+
+        var listenerCon = ds.getConnection();
+        
+        try (var stmt = listenerCon.createStatement()) {
+            stmt.execute("LISTEN messages");
+        }
         
         AtomicSnowflake counter;
         try (var con = ds.getConnection()) {
@@ -40,9 +50,28 @@ public class App {
             counter = new AtomicSnowflake();
         }
 
-        server.setHandler(new ContextHandlerCollection(
-            new ContextHandler(ChatHandler.from(server, ds, counter), "/chat")
-        ));
+        server.setHandler(new GzipHandler(new ContextHandlerCollection(
+            new ContextHandler(
+                ChatHandler.from(
+                    server,
+                    ds,
+                    listenerCon.unwrap(PGConnection.class),
+                    counter),
+    "/chat"))));
+
+        var idMgr = new DefaultSessionIdManager(server);
+        server.addBean(idMgr, true);
+
+        var cacheFactory = new NullSessionCacheFactory();
+        cacheFactory.setFlushOnResponseCommit(true);
+        cacheFactory.setRemoveUnloadableSessions(true);
+        server.addBean(cacheFactory);
+
+        var dbAdaptor = new DatabaseAdaptor();
+        dbAdaptor.setDatasource(ds);
+        var datastoreFactory = new JDBCSessionDataStoreFactory();
+        datastoreFactory.setDatabaseAdaptor(dbAdaptor);
+        server.addBean(datastoreFactory);
 
         server.start();
     }
