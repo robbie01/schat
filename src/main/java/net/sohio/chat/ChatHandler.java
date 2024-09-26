@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -93,8 +92,8 @@ public class ChatHandler extends Handler.Abstract {
         private DataSource ds;
         private PGConnection listenerCon;
         private Session session;
-        private AtomicInteger listening = new AtomicInteger();
-        private Snowflake lastSnowflake = null;
+        private int listening = FRESH;
+        private long lastSnowflake = -1;
 
         public WebSocketHandler(String channel, DataSource ds, PGConnection listenerCon) throws SQLException {
             this.channel = channel;
@@ -103,29 +102,31 @@ public class ChatHandler extends Handler.Abstract {
         }
 
         @OnWebSocketOpen
-        public void open(Session session) {
+        public synchronized void open(Session session) {
             this.session = session;
             session.setIdleTimeout(Duration.ZERO);
         }
 
         @OnWebSocketMessage
-        public void message(Reader message) {
-            if (!listening.compareAndSet(FRESH, LISTENING)) return;
+        public synchronized void message(Reader message) {
+            if (listening != FRESH) return;
+            listening = LISTENING;
 
             var msg = gson.fromJson(message, IncomingMessage.class);
             long after = Long.parseLong(msg.after());
 
-            lastSnowflake = new Snowflake(after);
+            lastSnowflake = after;
 
             listenerCon.addNotificationListener("messages", this);
             this.notification(0, null, channel);
         }
 
         @OnWebSocketClose
-        public void close(int statusCode, String reason) {
-            if (listening.getAndSet(CLOSED) == LISTENING) {
+        public synchronized void close(int statusCode, String reason) {
+            if (listening == LISTENING) {
                 listenerCon.removeNotificationListener(this);
             }
+            listening = CLOSED;
         }
 
         // @OnWebSocketError
@@ -139,12 +140,12 @@ public class ChatHandler extends Handler.Abstract {
                 con.setAutoCommit(true);
                 try (var stmt = con
                         .prepareStatement("SELECT id, username, msg FROM messages WHERE id > ?")) {
-                    stmt.setLong(1, lastSnowflake.rep());
+                    stmt.setLong(1, lastSnowflake);
                     var rs = stmt.executeQuery();
                     var messages = new ArrayList<Map<String, Object>>();
 
                     while (rs.next()) {
-                        lastSnowflake = new Snowflake(rs.getLong("id"));
+                        lastSnowflake = rs.getLong("id");
                         var username = rs.getString("username");
                         var msg = rs.getString("msg");
 
@@ -241,11 +242,13 @@ public class ChatHandler extends Handler.Abstract {
 
     @Override
     public boolean handle(Request req, Response resp, Callback cb) throws Exception {
-        if ("/".equals(Request.getPathInContext(req))) {
+        var path = Request.getPathInContext(req);
+
+        if (path.length() == 0 ||"/".equals(path)) {
             resp.setStatus(HttpStatus.TEMPORARY_REDIRECT_307);
             resp.getHeaders().put(
-                HttpHeader.LOCATION,
-                Response.toRedirectURI(req, "general/")
+                "Location",
+                Request.newHttpURIFrom(req, "/general/").getPath()
             );
         } else switch (req.getMethod()) {
             case "GET":

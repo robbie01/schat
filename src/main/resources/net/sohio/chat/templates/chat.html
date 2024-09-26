@@ -13,13 +13,12 @@
                 font-size: 62.5%;
                 height: 100%;
                 overscroll-behavior: none;
-                --background-color: #ffffff;
+                --background-color: #f9f9f9;
                 --text-color: #000000;
-                --chat-bg-color: #f0f0f0;
+                --chat-bg-color: #eee;
                 --message-border-color: #ccc;
                 --send-bg-color: #e0e0e0;
                 --input-bg-color: #fff;
-                --input-text-color: #000;
                 --submit-bg-color: #6200ea;
                 --submit-hover-bg-color: #3700b3;
                 --submit-text-color: #ffffff;
@@ -29,11 +28,10 @@
                 :root {
                     --background-color: #121212;
                     --text-color: #ffffff;
-                    --chat-bg-color: #1e1e1e;
-                    --message-border-color: #333;
+                    --chat-bg-color: #333;
+                    --message-border-color: #444;
                     --send-bg-color: #242424;
                     --input-bg-color: #333;
-                    --input-text-color: #fff;
                 }
             }
 
@@ -44,9 +42,58 @@
                 color: var(--text-color);
                 height: 100%;
                 font-size: 1.6rem;
+                display: flex;
+            }
+
+            #channels {
+                width: calc(100% / 6);
+                display: flex;
+                flex-direction: column;
+                box-sizing: border-box;
+                padding: 1.5rem 0 1rem 1rem;
+            }
+
+            #channels a {
+                position: relative;
+                padding: 1rem;
+                box-sizing: border-box;
+                text-decoration: none;
+                text-align: right;
+                color: var(--text-color);
+            }
+
+            #channels a:not([href]) {
+                background: var(--chat-bg-color);
+                border-radius: 1rem 0 0 1rem;
+            }
+
+            /* fancy inverted border radius */
+            #channels a:not([href])::before {
+                content: "";
+                position: absolute;
+                background: transparent;
+                width: 1rem;
+                height: 2rem;
+                top: -2rem;
+                right: 0;
+                border-bottom-right-radius: 1rem;
+                box-shadow: 0 1rem 0 0 var(--chat-bg-color);
+            }
+
+            #channels a:not([href])::after {
+                content: "";
+                position: absolute;
+                background: transparent;
+                width: 1rem;
+                height: 2rem;
+                bottom: -2rem;
+                right: 0;
+                border-top-right-radius: 1rem;
+                box-shadow: 0 -1rem 0 0 var(--chat-bg-color);
             }
 
             #chat {
+                flex: 1;
                 display: flex;
                 flex-direction: column;
                 height: 100%;
@@ -59,9 +106,9 @@
                 overflow-y: auto;
                 padding: 1rem;
                 list-style-type: none;
-                display: flex;
+                /*display: flex;
                 flex-direction: column;
-                justify-content: flex-end;
+                justify-content: flex-end;*/
             }
 
             #messages li {
@@ -88,7 +135,7 @@
                 border-radius: 0.5rem;
                 margin-right: 1rem;
                 background-color: var(--input-bg-color);
-                color: var(--input-text-color);
+                color: var(--text-color);
                 font: inherit;
                 font-weight: 400;
             }
@@ -109,6 +156,10 @@
         </style>
     </head>
     <body>
+        <div id="channels" hx-target="#chat">
+            <a>general</a>
+            <a href="/chat/abc/">abc</a>
+        </div>
         <div id="chat" hx-ext="ws" ws-connect="ws">
             <ul id="messages" th:attrappend="hx-swap-oob=${liveUpdate}?'beforeend'">
                 <li th:each="message: ${messages}" th:attr="data-id=${message.id}">
@@ -142,7 +193,7 @@
                 })
             }
         </script>
-        <script src="https://unpkg.com/htmx.org@2.0.2/dist/htmx.min.js"></script>
-        <script src="https://unpkg.com/htmx-ext-ws@2.0.1/ws.js"></script>
+        <script src="/static/htmx.js"></script>
+        <script src="/static/htmx-ext-ws.js"></script>
     </body>
 </html>
