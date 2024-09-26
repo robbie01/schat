@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: schat
+spec:
+  volumes:
+  - name: schat-dbdata
+    persistentVolumeClaim:
+      claimName: schat-dbdata
+  - name: schat-webdata
+    persistentVolumeClaim:
+      claimName: schat-webdata
+  - name: schat-webconfig
+    persistentVolumeClaim:
+      claimName: schat-webconfig
+  - name: schat-dbsock
+    emptyDir: {}
+  - name: schat-appsock
+    emptyDir: {}
+  containers:
+  - name: database
+    image: database
+    volumeMounts:
+    - name: schat-dbdata
+      mountPath: /var/lib/postgresql/data:Z
+    - name: schat-dbsock
+      mountPath: /var/run/postgresql:z
+  - name: app
+    image: app
+    volumeMounts:
+    - name: schat-dbsock
+      mountPath: /var/run/postgresql:z
+    - name: schat-appsock
+      mountPath: /var/run/schat:z
+  - name: web
+    image: web
+    volumeMounts:
+    - name: schat-webdata
+      mountPath: /data:Z
+    - name: schat-webconfig
+      mountPath: /config:Z
+    - name: schat-appsock
+      mountPath: /var/run/schat:z

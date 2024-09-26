@@ -1,0 +1,19 @@
+:80 {
+    file_server /static/* {
+        precompressed zstd
+    }
+
+    rewrite /favicon.ico /static/favicon.ico
+
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade    websocket
+    }
+    @chat path /chat /chat/*
+
+    handle @chat {
+        encode zstd
+        reverse_proxy @websockets unix//var/run/schat/h2c.sock
+        reverse_proxy unix+h2c//var/run/schat/h2c.sock
+    }
+}

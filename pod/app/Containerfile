@@ -1,0 +1,5 @@
+FROM docker.io/library/eclipse-temurin:21-jre
+
+RUN mkdir /opt/app
+COPY schat.jar /opt/app/schat.jar
+CMD ["java", "-Dorg.slf4j.simpleLogger.defaultLogLevel=debug", "-Dnet.sohio.chat.h2cPath=/var/run/schat/h2c.sock", "-jar", "/opt/app/schat.jar"]
