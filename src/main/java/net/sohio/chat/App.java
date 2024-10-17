@@ -66,14 +66,16 @@ public class App {
         var ds = configureDatabase();
 
         var listenerCon = ds.getConnection();  
-        try (var stmt = listenerCon.createStatement()) {
-            stmt.execute("LISTEN messages");
+        listenerCon.setAutoCommit(true);
+        try (var stmt = listenerCon.prepareStatement("LISTEN messages")) {
+            stmt.execute();
         }
         
         AtomicSnowflake counter;
         try (var con = ds.getConnection()) {
-            try (var stmt = con.createStatement()) {
-                var rs = stmt.executeQuery("SELECT id FROM messages ORDER BY id DESC LIMIT 1");
+            con.setAutoCommit(true);
+            try (var stmt = con.prepareStatement("SELECT id FROM messages ORDER BY id DESC LIMIT 1")) {
+                var rs = stmt.executeQuery();
                 counter = new AtomicSnowflake(new Snowflake(rs.getLong("id")));
             }
         } catch (SQLException ex) {

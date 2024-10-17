@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -44,6 +45,9 @@ public class ChatHandler extends Handler.Abstract {
     private DataSource ds;
     private AtomicSnowflake counter;
 
+    private static UriTemplatePathSpec nakedSpec = new UriTemplatePathSpec("/{channel}");
+    private static UriTemplatePathSpec baseSpec = new UriTemplatePathSpec("/{channel}/");
+    private static UriTemplatePathSpec pathSpec = new UriTemplatePathSpec("/{channel}/{endpoint}");
     private static ITemplateEngine templateEngine = buildTemplateEngine();
 
     private ChatHandler(DataSource ds, AtomicSnowflake counter) {
@@ -52,9 +56,13 @@ public class ChatHandler extends Handler.Abstract {
     }
 
     public static Handler from(Server server, DataSource ds, PGConnection listenerCon, AtomicSnowflake counter) {
+
         var ws = WebSocketUpgradeHandler.from(server, container -> {
-            container.addMapping(new UriTemplatePathSpec("/{channel}/ws"), (req, res, cb) -> {
-                return new WebSocketHandler("", ds, listenerCon);
+            container.addMapping(pathSpec, (req, res, cb) -> {
+                var params = pathSpec.getPathParams(Request.getPathInContext(req));
+                if (!"ws".equals(params.get("endpoint"))) return null;
+
+                return new WebSocketHandler(params.get("channel"), ds, listenerCon);
             });
         });
         ws.setHandler(new ChatHandler(ds, counter));
@@ -136,11 +144,14 @@ public class ChatHandler extends Handler.Abstract {
 
         @Override
         public synchronized void notification(int processId, String channelName, String payload) {
+            if (!channel.equals(payload)) return;
+
             try (var con = ds.getConnection()) {
                 con.setAutoCommit(true);
                 try (var stmt = con
-                        .prepareStatement("SELECT id, username, msg FROM messages WHERE id > ?")) {
+                        .prepareStatement("SELECT id, username, msg FROM messages WHERE id > ? AND channelId = (SELECT id FROM channels where name = ?)")) {
                     stmt.setLong(1, lastSnowflake);
+                    stmt.setString(2, channel);
                     var rs = stmt.executeQuery();
                     var messages = new ArrayList<Map<String, Object>>();
 
@@ -174,21 +185,34 @@ public class ChatHandler extends Handler.Abstract {
         }
     }
 
-    private void doGet(Request req, Response resp) throws SQLException, IOException {
+    private void doGet(String channel, Request req, Response resp) throws SQLException, IOException {
         var sesh = req.getSession(true);
-        String name;
-        if ((name = (String)sesh.getAttribute("username")) == null) {
-            name = "myUsername";
-            sesh.setAttribute("username", name);
+        String username;
+        if ((username = (String)sesh.getAttribute("username")) == null) {
+            username = "myUsername";
+            sesh.setAttribute("username", username);
         }
 
+        var channels = new ArrayList<Map<String, Object>>();
         var messages = new ArrayList<Map<String, Object>>();
         long lastSnowflake = -1;
 
         try (var con = ds.getConnection()) {
             con.setAutoCommit(true);
-            try (var stmt = con.createStatement()) {
-                var rs = stmt.executeQuery("SELECT id, username, msg FROM messages");
+            try (var stmt = con.prepareStatement("SELECT name FROM channels")) {
+                var rs = stmt.executeQuery();
+                while (rs.next()) {
+                    var name = rs.getString("name");
+                    var channelInfo = new HashMap<String, Object>();
+                    channelInfo.put("name", name);
+                    if (!name.equals(channel))
+                        channelInfo.put("href", Request.newHttpURIFrom(req, String.format("/%s/", name)).getPath());
+                    channels.add(channelInfo);
+                }
+            }
+            try (var stmt = con.prepareStatement("SELECT id, username, msg FROM messages WHERE channelId = (SELECT id FROM channels where name = ?)")) {
+                stmt.setString(1, channel);
+                var rs = stmt.executeQuery();
                 while (rs.next()) {
                     lastSnowflake = rs.getLong("id");
                     messages.add(Map.of(
@@ -200,8 +224,10 @@ public class ChatHandler extends Handler.Abstract {
         }
 
         var ctx = new Context(Locale.US, Map.of(
-                "messages", messages,
-                "lastSnowflake", lastSnowflake));
+            "ws", req.getHttpURI().getPath() + "ws",
+            "channels", channels,
+            "messages", messages,
+            "lastSnowflake", lastSnowflake));
 
         resp.setStatus(HttpStatus.OK_200);
         var headers = resp.getHeaders();
@@ -209,10 +235,14 @@ public class ChatHandler extends Handler.Abstract {
         headers.add(HttpHeader.CACHE_CONTROL, "no-cache");
         headers.add(HttpHeader.EXPIRES, 0);
 
-        templateEngine.process("chat", ctx, new OutputStreamWriter(Response.asBufferedOutputStream(req, resp), StandardCharsets.UTF_8));
+        Set<String> selectors = null;
+        if ("wrapper".equals(req.getHeaders().get("HX-Target")))
+            selectors = Set.of("#wrapper");
+
+        templateEngine.process("chat", selectors, ctx, new OutputStreamWriter(Response.asBufferedOutputStream(req, resp), StandardCharsets.UTF_8));
     }
 
-    protected void doPost(Request req, Response resp) throws Exception {
+    protected void doPost(String channel, Request req, Response resp) throws Exception {
         var sesh = req.getSession(false);
         var username = (String)sesh.getAttribute("username");
         var msg = Request.getParameters(req).getValue("msg").trim();
@@ -223,14 +253,15 @@ public class ChatHandler extends Handler.Abstract {
             try (var con = ds.getConnection()) {
                 con.setAutoCommit(false);
                 var snowflake = counter.incrementAndGet(timestamp);
-                try (var stmt = con.prepareStatement("INSERT INTO messages VALUES (?, ?, ?)")) {
+                try (var stmt = con.prepareStatement("INSERT INTO messages VALUES (?, (SELECT id FROM channels where name = ?), ?, ?)")) {
                     stmt.setLong(1, snowflake.rep());
-                    stmt.setString(2, username);
-                    stmt.setString(3, Request.getParameters(req).getValue("msg"));
+                    stmt.setString(2, channel);
+                    stmt.setString(3, username);
+                    stmt.setString(4, Request.getParameters(req).getValue("msg"));
                     stmt.execute();
                 }
                 try (var stmt = con.prepareStatement("SELECT pg_notify('messages', ?)")) {
-                    stmt.setString(1, "");
+                    stmt.setString(1, channel);
                     stmt.execute();
                 }
                 con.commit();
@@ -247,18 +278,30 @@ public class ChatHandler extends Handler.Abstract {
         if (path.length() == 0 ||"/".equals(path)) {
             resp.setStatus(HttpStatus.TEMPORARY_REDIRECT_307);
             resp.getHeaders().put(
-                "Location",
+                HttpHeader.LOCATION,
                 Request.newHttpURIFrom(req, "/general/").getPath()
             );
-        } else switch (req.getMethod()) {
-            case "GET":
-                doGet(req, resp);
-                break;
-            case "POST":
-                doPost(req, resp);
-                break;
-            default:
-                return false;
+        } else if (nakedSpec.matches(path)) {
+            resp.setStatus(HttpStatus.TEMPORARY_REDIRECT_307);
+            resp.getHeaders().put(
+                HttpHeader.LOCATION,
+                Request.newHttpURIFrom(req, String.format("/%s/", nakedSpec.getPathParams(path).get("channel"))).getPath()
+            );
+        } else if (baseSpec.matches(path)) {
+            var channel = baseSpec.getPathParams(path).get("channel");
+
+            switch (req.getMethod()) {
+                case "GET":
+                    doGet(channel, req, resp);
+                    break;
+                case "POST":
+                    doPost(channel, req, resp);
+                    break;
+                default:
+                    return false;
+            }
+        } else {
+            return false;
         }
         cb.succeeded();
         return true;

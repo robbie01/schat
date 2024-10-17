@@ -10,43 +10,33 @@
         <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
         <link href="/static/chat.css" rel="stylesheet">
     </head>
-    <body>
-        <div id="channels" hx-target="#chat">
-            <a>general</a>
-            <a href="/chat/abc/">abc</a>
-        </div>
-        <div id="chat" hx-ext="ws" ws-connect="ws">
-            <ul id="messages" th:attrappend="hx-swap-oob=${liveUpdate}?'beforeend'">
-                <li th:each="message: ${messages}" th:attr="data-id=${message.id}">
-                    <strong th:text="${message.username}">robbie</strong>: <span th:text="${message.msg}">hello world</span>
-                </li>
-            </ul>
-            <form id="send" hx-post="" hx-on::before-request="this.reset()">
-                <input type="text" name="msg" placeholder="Message...">
-                <input type="submit" value="➤">
-            </form>
+    <body hx-on::history-restore="scrollToBottom(document.getElementById('messages'))">
+        <div id="wrapper" hx-history-elt
+             hx-on::after-settle="scrollToBottom(document.getElementById('messages'))">
+            <div id="channels" hx-boost="true" hx-target="#wrapper" hx-swap="outerHTML" hx-sync="#channels:replace">
+                <a th:each="channel: ${channels}" th:attrappend="href=${channel.href != null}?${channel.href}" th:text="${channel.name}">general</a>
+            </div>
+            <div id="chat" hx-ext="ws" th:ws-connect="${ws}"
+                 hx-on::ws-open="let after = this.querySelector('#messages')
+                                     .lastElementChild?.dataset?.id ?? -1;
+                                 event.detail.socketWrapper.sendImmediately(
+                                     JSON.stringify({ after }),
+                                 messages);"
+                 hx-on::ws-after-message="scrollToBottom(document.getElementById('messages'))">
+                <ul id="messages" th:attrappend="hx-swap-oob=${liveUpdate}?'beforeend'">
+                    <li th:each="message: ${messages}" th:attr="data-id=${message.id}">
+                        <strong th:text="${message.username}">robbie</strong>: <span th:text="${message.msg}">hello world</span>
+                    </li>
+                </ul>
+                <form id="send" hx-post="" hx-on::before-request="this.reset()">
+                    <input type="text" name="msg" placeholder="Message...">
+                    <input type="submit" value="➤">
+                </form>
+            </div>
         </div>
         <script>
-            {
-                let chat = document.getElementById("chat")
-                let messages = document.getElementById("messages")
-
-                chat.addEventListener("htmx:wsOpen", e => {
-                    let after = messages.lastElementChild?.dataset?.id ?? -1;
-                    e.detail.socketWrapper.sendImmediately(
-                        JSON.stringify({ after }),
-                        messages
-                    )
-                })
-
-                window.addEventListener("DOMContentLoaded", () => {
-                    messages.scrollTo(0, messages.scrollHeight)
-                })
-
-                chat.addEventListener("htmx:wsAfterMessage", () => {
-                    messages.scrollTo(0, messages.scrollHeight)
-                })
-            }
+            const scrollToBottom = messages => messages.scrollTo(0, messages.scrollHeight)
+            document.addEventListener('DOMContentLoaded', () => scrollToBottom(document.getElementById('messages')))
         </script>
         <script src="/static/htmx.js"></script>
         <script src="/static/htmx-ext-ws.js"></script>
